@@ -28,6 +28,7 @@ def clearFrame(backupFrame):
     cv2.imshow("w1", backupFrame)
     image = backupFrame.copy()
     objects_pointers = []
+    print "[INFO] (" + str(time.strftime("%Y-%m-%d-%H:%M:%S")) + ") Frame Cleared"
 #function to save snap frame from video and add path to file alongside object count and positions
 def saveFrame(frame):
     global count
@@ -42,9 +43,11 @@ def saveFrame(frame):
     outputString += "\n"
     file.write(outputString)
     file.close()
+    print "[INFO] (" + str(time.strftime("%Y-%m-%d-%H:%M:%S")) + ") Saved frame " + str("positive_frame_%d.jpg" % count)
     objects_pointers = []
     clearFrame(frame)
     nextFrame()
+
 def saveFrameNegative(frame):
     global count_negative
     count_negative += 1
@@ -56,18 +59,20 @@ def saveFrameNegative(frame):
     objects_pointers = []
     file.write(outputString)
     file.close()
+    print "[INFO] (" + str(time.strftime("%Y-%m-%d-%H:%M:%S")) + ") Saved frame " + str("negative_frame_%d.jpg" % count_negative)
     clearFrame(frame)
     nextFrame()
 def nextFrame():
     global counter, backup_img
     counter += 1
-    print(counter)
+    #print(counter)
     if (counter >= max_counter):
         counter = 0
         print(counter)
     image = cv2.imread(cv_img[counter])
     backup_img = image.copy()
     cv2.imshow("w1", image)
+    print "[INFO] (" + str(time.strftime("%Y-%m-%d-%H:%M:%S")) + ") Next frame"
 def undoLastRectangle():
     global objects_pointers, backup_img, image
     image_undo = backup_img.copy()
@@ -77,10 +82,12 @@ def undoLastRectangle():
         if(len(objects_pointers) == 1):
             objects_pointers.pop()
             cv2.imshow("w1", image_undo)
+            print "[INFO] (" + str(time.strftime("%Y-%m-%d-%H:%M:%S")) + ") No remaining rectangle "
         else:
             objects_pointers.pop()
             #print "---------------------LEN"
             #print len(objects_pointers)
+            print "[INFO] (" + str(time.strftime("%Y-%m-%d-%H:%M:%S")) + ") Remaining rectangle count -  " + str(len(objects_pointers))
             for objectPointer in objects_pointers:
                 outputString = " %d %d %d %d" % (objectPointer[0], objectPointer[1], objectPointer[2], objectPointer[3])
                 #print "--------" + outputString + "\n"
@@ -90,8 +97,10 @@ def undoLastRectangle():
                 #print "--------" + outputString + "\n"
                 cv2.rectangle(image_undo, r_start, r_end, color, 2)
                 cv2.imshow("w1", image_undo)
+                print "[INFO] (" + str(time.strftime("%Y-%m-%d-%H:%M:%S")) + ") Remaining rectangle " + str(outputString)
     else:
         cv2.imshow("w1", image_undo)
+        print "[INFO] (" + str(time.strftime("%Y-%m-%d-%H:%M:%S")) + ") No remaining rectangle "
     image = image_undo.copy()
 def onMouse(event, x, y, flags, param):
     # onMouse function for drawing rectangles on video frame
@@ -117,14 +126,19 @@ def onMouse(event, x, y, flags, param):
         objects_pointers.append(object_pointer)
         cv2.rectangle(image, rect_start, rect_end, color,2)
         cv2.imshow("w1", image)
+        outputString = " %s %s " % (rect_start, rect_end)
+        print "[INFO] (" + str(time.strftime("%Y-%m-%d-%H:%M:%S")) + ") New rectangle " + str(outputString)
         boxes.pop()
         boxes.pop()
+
+
 
 cv2.namedWindow("w1")
 cv2.setMouseCallback('w1',onMouse)
 
 #print("---------------------------------")
 #print(counter)
+print "[INFO] (" + str(time.strftime("%Y-%m-%d-%H:%M:%S")) + ") Start "
 image = cv2.imread(cv_img[counter])
 backup_img = image.copy()
 cv2.imshow("w1", image)
