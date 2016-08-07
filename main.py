@@ -22,6 +22,16 @@ mouse_down = 0
 
 timestring = time.strftime("%Y%m%d-%H%M%S")
 
+
+def printHelp():
+    print "[HOW TO USE]"
+    print " [LEFT_ARROW] / [RIGHT_ARROW]  - frame before / frame next"
+    print " [S] - save positive frame with rectangles"
+    print " [N] - save positive frame with rectangles"
+    print " [D] - clear all rectangles"
+    print " [F] - undo last rectangle"
+    print " [ESC] - exit"
+
 #function to clear boxes drawn and empty objects_pointer stack
 def clearFrame(backupFrame):
     global image
@@ -135,7 +145,7 @@ def onMouse(event, x, y, flags, param):
 
 cv2.namedWindow("w1")
 cv2.setMouseCallback('w1',onMouse)
-
+printHelp()
 #print("---------------------------------")
 #print(counter)
 print "[INFO] (" + str(time.strftime("%Y-%m-%d-%H:%M:%S")) + ") Start "
@@ -160,6 +170,7 @@ while success:
         image = cv2.imread(cv_img[counter])
         backup_img = image.copy()
         cv2.imshow("w1", image)
+        print "[INFO] (" + str(time.strftime("%Y-%m-%d-%H:%M:%S")) + ") Frame after"
     if res == 65361:
         counter-=1
         #print(counter)
@@ -169,6 +180,7 @@ while success:
         image = cv2.imread(cv_img[counter])
         backup_img = image.copy()
         cv2.imshow("w1", image)
+        print "[INFO] (" + str(time.strftime("%Y-%m-%d-%H:%M:%S")) + ") Frame before"
     if res == ord('d'):
         clearFrame(backup_img)
     if res == ord('s'):
