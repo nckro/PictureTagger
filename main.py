@@ -1,191 +1,210 @@
+import Tkinter as tk
+from Tkinter import *
 import cv2
 import glob
 import time
+from PIL import ImageTk
+from PIL import Image
+from tkFileDialog import *
 
-boxes = []
-objects_pointers = []
+import os
 
-# OUR ARRAY FOR IMAGES
-cv_img = []
-cv_img = glob.glob('frames/*.jpg')
-cv_img.sort()
-max_counter = len(cv_img)
-counter=0
+class PictureTagger(tk.Tk):
+    def __init__(self,inputDirectory="frames"):
+        tk.Tk.__init__(self)
 
-image=cv2.imread(cv_img[counter])
-success = 1
+        self.timestring = time.strftime("%Y%m%d-%H%M%S")
+        self.directory_name = "OUT_" + str(self.timestring)
+        if not os.path.exists(self.directory_name):
+            os.makedirs(self.directory_name)
+        self.boxes = []
+        self.objects_pointers = []
+        self.input_directory= inputDirectory
 
-count = 0
-count_negative = 0
-stop_var = 0
-mouse_down = 0
+        #print(input_directory)
+        #IMAGE ARRAY
+        self.cv_img = []
+        self.cv_img = glob.glob(self.input_directory + '/*.jpg')
+        self.cv_img.sort()
 
-timestring = time.strftime("%Y%m%d-%H%M%S")
+        #COUNTERS
+        self.max_counter = len(self.cv_img)
+        self.counter = 0
+        self.count_positive = 0
+        self.count_negative = 0
+
+        #read first image
+        self.image = cv2.imread(self.cv_img[self.counter])
+        #rearrange color channel
+        self.printableImage = self.returnPrintableImage(self.image)
+
+        #inherit size for canvas from image
+        self.y, self.x = self.image.shape[:2]
+
+        #App customization
+        self.title("PictureTagger v1.1")
+
+        #DRAG AND RECTANGLE COORDS
+        self.recx = 0
+        self.recy = 0
+
+        #PICTURE FRAME
+        self.pictureFrame = Frame(self)
+        self.Backwards = Button(self.pictureFrame, text='<', command=lambda: self.leftKeyPress())
+        self.canvas = tk.Canvas(self.pictureFrame, width=self.x, height=self.y, cursor="cross")
+        self.canvas.create_image(0, 0, image=self.printableImage, anchor='nw')
+        self.Forward = Button(self.pictureFrame, text='>', command=lambda: self.rightKeyPress())
+
+        #BUTTONS FRAME
+        self.buttonsFrame = Frame(self)
+        self.SavePositiveFrame = Button(self.buttonsFrame, text='Save Positive Frame (S)', command=lambda: self.savePositiveFrame())
+        self.SaveNegativeFrame = Button(self.buttonsFrame, text='Save Negative Frame (N)', command=lambda: self.saveNegativeFrame())
+        self.ClearFrame = Button(self.buttonsFrame, text='Clear Frame (D)', command=lambda: self.clearFrame())
+        self.UndoRectangle = Button(self.buttonsFrame, text='Undo Last Rectangle (F)', command=lambda: self.undoRectangle())
+
+        #LOGBOX FRAME
+        self.logBoxFrame = Frame(self)
+        self.logBox = Text(self.logBoxFrame, height=10, width=self.y/3)
+        self.scrollbarLogBox = Scrollbar(self.logBoxFrame)
+        self.logBox.config(yscrollcommand=self.scrollbarLogBox.set)
+        self.scrollbarLogBox.config(command=self.logBox.yview)
+
+        #GRID TIME
+        #BUTTONS FRAME
+        self.SavePositiveFrame.grid(row=0, column=0, padx=(10, 10))
+        self.SaveNegativeFrame.grid(row=0, column=1, padx=(10, 10))
+        self.ClearFrame.grid(row=0, column=2, padx=(10, 10))
+        self.UndoRectangle.grid(row=0, column=3, padx=(10, 10))
 
 
-def printHelp():
-    print "[HOW TO USE]"
-    print " [LEFT_ARROW] / [RIGHT_ARROW]  - frame before / frame next"
-    print " [S] - save positive frame with rectangles"
-    print " [N] - save positive frame with rectangles"
-    print " [D] - clear all rectangles"
-    print " [F] - undo last rectangle"
-    print " [ESC] - exit"
+        #PICTURE FRAME
+        self.Backwards.grid(row=0,column=0)
+        self.canvas.grid(row=0,column=2)
+        self.Forward.grid(row=0,column=3)
 
-#function to clear boxes drawn and empty objects_pointer stack
-def clearFrame(backupFrame):
-    global image
-    cv2.imshow("w1", backupFrame)
-    image = backupFrame.copy()
-    objects_pointers = []
-    print "[INFO] (" + str(time.strftime("%Y-%m-%d-%H:%M:%S")) + ") Frame Cleared"
-#function to save snap frame from video and add path to file alongside object count and positions
-def saveFrame(frame):
-    global count
-    global objects_pointers
-    outputString = ""
-    count+= 1
-    outputString+= "positive_frame_%d.jpg %d" % (count,count)
-    cv2.imwrite("positive_frame_%d.jpg" % count, frame)  # save frame as JPEG file
-    file = open(timestring+".txt", "a")
-    for objectPointer in objects_pointers:
-        outputString+= " %d %d %d %d" % (objectPointer[0],objectPointer[1],objectPointer[2],objectPointer[3])
-    outputString += "\n"
-    file.write(outputString)
-    file.close()
-    print "[INFO] (" + str(time.strftime("%Y-%m-%d-%H:%M:%S")) + ") Saved frame " + str("positive_frame_%d.jpg" % count)
-    objects_pointers = []
-    clearFrame(frame)
-    nextFrame()
+        #LOG BOX FRAME
+        self.logBox.grid(row=0, column=0)
+        self.scrollbarLogBox.grid(row=0,column=1)
 
-def saveFrameNegative(frame):
-    global count_negative
-    count_negative += 1
-    cv2.imwrite("negative_frame_%d.jpg" % count_negative, frame)  # save frame as JPEG file
-    file = open(timestring + "_negative.txt", "a")
-    outputString = ""
-    outputString += "negative_frame_%d.jpg" % (count_negative)
-    outputString += "\n"
-    objects_pointers = []
-    file.write(outputString)
-    file.close()
-    print "[INFO] (" + str(time.strftime("%Y-%m-%d-%H:%M:%S")) + ") Saved frame " + str("negative_frame_%d.jpg" % count_negative)
-    clearFrame(frame)
-    nextFrame()
-def nextFrame():
-    global counter, backup_img
-    counter += 1
-    #print(counter)
-    if (counter >= max_counter):
-        counter = 0
-        print(counter)
-    image = cv2.imread(cv_img[counter])
-    backup_img = image.copy()
-    cv2.imshow("w1", image)
-    print "[INFO] (" + str(time.strftime("%Y-%m-%d-%H:%M:%S")) + ") Next frame"
-def undoLastRectangle():
-    global objects_pointers, backup_img, image
-    image_undo = backup_img.copy()
-    color = (100, 255, 100)
-    outputString = ""
-    if(len(objects_pointers) >= 1):
-        if(len(objects_pointers) == 1):
-            objects_pointers.pop()
-            cv2.imshow("w1", image_undo)
-            print "[INFO] (" + str(time.strftime("%Y-%m-%d-%H:%M:%S")) + ") No remaining rectangle "
+        #FRAME LAYOUT
+        self.pictureFrame.grid(row=0)
+        self.buttonsFrame.grid(row=1)
+        self.logBoxFrame.grid(row=2)
+
+        #BINDS
+        self.canvas.bind("<ButtonPress-1>", self.on_button_press)
+        self.canvas.bind("<ButtonRelease-1>", self.on_button_release)
+        self.bind("<Left>",self.leftKeyPress)
+        self.bind("<Right>", self.rightKeyPress)
+
+        self.appendLog("Init")
+        self.appendLog("Input directory " + self.input_directory)
+        self.appendLog("Output directory " + self.directory_name)
+    def undoRectangle(self):
+        if (len(self.objects_pointers) >= 1):
+            if (len(self.objects_pointers) == 1):
+                self.canvas.delete(self.objects_pointers[-1])
+                self.objects_pointers.pop()
+                self.boxes.pop()
+                self.appendLog("No more rectangles on frame.")
+            else:
+                self.canvas.delete(self.objects_pointers[-1])
+                self.objects_pointers.pop()
+                self.boxes.pop()
+                self.appendLog("Remaining rectangles count - " + str(len(self.objects_pointers)))
+                for box in self.boxes:
+                    self.appendLog( str(box))
         else:
-            objects_pointers.pop()
-            #print "---------------------LEN"
-            #print len(objects_pointers)
-            print "[INFO] (" + str(time.strftime("%Y-%m-%d-%H:%M:%S")) + ") Remaining rectangle count -  " + str(len(objects_pointers))
-            for objectPointer in objects_pointers:
-                outputString = " %d %d %d %d" % (objectPointer[0], objectPointer[1], objectPointer[2], objectPointer[3])
-                #print "--------" + outputString + "\n"
-                r_start = (objectPointer[0], objectPointer[1])
-                r_end = (objectPointer[2], objectPointer[3])
-                outputString = " %s %s " % (r_start,r_end)
-                #print "--------" + outputString + "\n"
-                cv2.rectangle(image_undo, r_start, r_end, color, 2)
-                cv2.imshow("w1", image_undo)
-                print "[INFO] (" + str(time.strftime("%Y-%m-%d-%H:%M:%S")) + ") Remaining rectangle " + str(outputString)
-    else:
-        cv2.imshow("w1", image_undo)
-        print "[INFO] (" + str(time.strftime("%Y-%m-%d-%H:%M:%S")) + ") No remaining rectangle "
-    image = image_undo.copy()
-def onMouse(event, x, y, flags, param):
-    # onMouse function for drawing rectangles on video frame
-    global mouse_down
-    # we tell python that mouse_down variable is global
-    if event == cv2.EVENT_LBUTTONDOWN:
-        mouse_down = 1
-        #print 'Start Mouse Position: ' + str(x) + ', ' + str(y)
-        sbox = [x, y]
-        boxes.append(sbox)
-    elif event == cv2.EVENT_LBUTTONUP:
-        mouse_down = 0
-        #print 'End Mouse Position: ' + str(x) + ', ' + str(y)
-        ebox = [x, y]
-        boxes.append(ebox)
-        color = (100, 255, 100)
-        #print "boxes[-2][0]=" + str(boxes[-2][0]) + "boxes[-2][1]=" + str(boxes[-2][1])
-        #print " ### ### ###\n"
-        #print "boxes[-1][0]=" + str(boxes[-1][0]) + "boxes[-1][1]=" + str(boxes[-1][1])
-        rect_start=(boxes[-2][0],boxes[-2][1])
-        rect_end=(boxes[-1][0],boxes[-1][1])
-        object_pointer = (boxes[-2][0],boxes[-2][1],boxes[-1][0],boxes[-1][1])
-        objects_pointers.append(object_pointer)
-        cv2.rectangle(image, rect_start, rect_end, color,2)
-        cv2.imshow("w1", image)
-        outputString = " %s %s " % (rect_start, rect_end)
-        print "[INFO] (" + str(time.strftime("%Y-%m-%d-%H:%M:%S")) + ") New rectangle " + str(outputString)
-        boxes.pop()
-        boxes.pop()
+            self.appendLog("No more rectangles on frame.")
+    def on_button_press(self, event):
+        self.recx = event.x
+        self.recy = event.y
+
+    def on_button_release(self, event):
+        x0,y0 = (self.recx, self.recy)
+        x1,y1 = (event.x, event.y)
+        self.objects_pointers.append(self.canvas.create_rectangle(x0,y0,x1,y1,width=3, outline="red"))
+        self.boxes.append((x0,y0,x1,y1))
+        self.appendLog("Drawn rectangle : " + str((x0,y0,x1,y1)))
+
+    def leftKeyPress(self,a="",b=""):
+        self.counter -= 1
+        if (self.counter < 0):
+            self.counter = self.max_counter -1
+        self.image = cv2.imread(self.cv_img[self.counter])
+        self.printableImage = self.returnPrintableImage(self.image)
+        self.canvas.delete("all")
+        self.canvas.create_image(0, 0, image=self.printableImage, anchor='nw')
+        self.appendLog("Backward frame")
+
+    def rightKeyPress(self,a="",b=""):
+        self.counter+=1
+        if (self.counter >= self.max_counter):
+            self.counter = 0
+        self.image = cv2.imread(self.cv_img[self.counter])
+        self.printableImage = self.returnPrintableImage(self.image)
+        self.canvas.delete("all")
+        self.canvas.create_image(0, 0, image=self.printableImage, anchor='nw')
+        self.appendLog("Forward frame")
+
+    def returnPrintableImage(self,image):
+        #converts opencv image from bgr to rgb and generates tk compat image
+        b, g, r = cv2.split(image)
+        printableImage = cv2.merge((r, g, b))
+        printableImage = Image.fromarray(printableImage)
+        printableImage = ImageTk.PhotoImage(printableImage)
+        return printableImage
+
+    def appendLog(self, quote):
+        textToAppend = "[INFO] [" + str(time.strftime("%Y-%m-%d-%H:%M:%S")) + " ] [ " + quote + " ] \n"
+        self.logBox.insert('1.0', textToAppend)
+    def clearFrame(self):
+        self.canvas.delete("all")
+        self.canvas.create_image(0, 0, image=self.printableImage, anchor='nw')
+        self.boxes = []
+        self.objects_pointers = []
+        self.appendLog("Frame clear")
+    def saveNegativeFrame(self):
+        self.count_negative += 1
+        cv2.imwrite(self.directory_name+"/negative_frame_%d.jpg" % self.count_negative, self.image)  # save frame as JPEG file
+        file = open(self.directory_name+"/"+self.timestring + "_negative.txt", "a")
+        outputString = ""
+        outputString += "negative_frame_%d.jpg" % (self.count_negative)
+        outputString += "\n"
+        self.canvas.delete("all")
+        self.canvas.create_image(0, 0, image=self.printableImage, anchor='nw')
+        self.boxes = []
+        self.objects_pointers = []
+        file.write(outputString)
+        file.close()
+        self.appendLog("Saved negative frame " + str("negative_frame_%d.jpg" % self.count_negative))
+        self.clearFrame()
+        self.rightKeyPress()
+    def savePositiveFrame(self):
+        outputString = ""
+        self.count_positive += 1
+        outputString += "positive_frame_%d.jpg %d" % (self.count_positive, len(self.objects_pointers))
+        cv2.imwrite(self.directory_name+"/positive_frame_%d.jpg" % self.count_positive, self.image)  # save frame as JPEG file
+        file = open(self.directory_name + "/" + self.timestring + ".txt", "a")
+        for box in self.boxes:
+            outputString += " %d %d %d %d" % (box[0], box[1], box[2], box[3])
+        outputString += "\n"
+        file.write(outputString)
+        file.close()
+        self.appendLog("Saved positive frame " + str("positive_frame_%d.jpg" % self.count_positive))
+        self.clearFrame()
+        self.leftKeyPress()
+    def pressed(self):
+        print("PRESSED")
 
 
+def main():
+    root = Tk()
+    root.iconify()
+    os.path.basename(askdirectory(title='Choose an input directory for images', mustexist=1))
+    root.destroy()
+    app = PictureTagger()
+    app.mainloop()
 
-cv2.namedWindow("w1")
-cv2.setMouseCallback('w1',onMouse)
-printHelp()
-#print("---------------------------------")
-#print(counter)
-print "[INFO] (" + str(time.strftime("%Y-%m-%d-%H:%M:%S")) + ") Start "
-image = cv2.imread(cv_img[counter])
-backup_img = image.copy()
-cv2.imshow("w1", image)
-
-old_rest = 0
-while success:
-    res = cv2.waitKey(1)
-    if(old_rest != res):
-        #print res
-        old_rest = res
-    if res == 27:
-        break
-    if res == 65363:
-        counter+=1
-        #print(counter)
-        if(counter >= max_counter):
-            counter = 0
-            #print(counter)
-        image = cv2.imread(cv_img[counter])
-        backup_img = image.copy()
-        cv2.imshow("w1", image)
-        print "[INFO] (" + str(time.strftime("%Y-%m-%d-%H:%M:%S")) + ") Frame after"
-    if res == 65361:
-        counter-=1
-        #print(counter)
-        if (counter < 0):
-            counter = max_counter-1
-            #print(counter)
-        image = cv2.imread(cv_img[counter])
-        backup_img = image.copy()
-        cv2.imshow("w1", image)
-        print "[INFO] (" + str(time.strftime("%Y-%m-%d-%H:%M:%S")) + ") Frame before"
-    if res == ord('d'):
-        clearFrame(backup_img)
-    if res == ord('s'):
-        saveFrame(backup_img)
-    if res == ord('n'):
-        saveFrameNegative(backup_img)
-    if res == ord('f'):
-        undoLastRectangle()
+if __name__ == "__main__":
+    main()
